@@ -6,32 +6,57 @@ from datetime import datetime
 class ExpenseTracker:
     def __init__(self, root):
         self.root = root
-        self.root.title("Expense Tracker")
+        self.root.title("Expense Tracker Pro")
         self.expenses = self.load_data()
 
-        # Поля ввода
-        tk.Label(root, text="Сумма:").grid(row=0, column=0)
-        self.amount_entry = tk.Entry(root)
+        # --- СЕКЦИЯ ВВОДА ---
+        input_frame = tk.LabelFrame(root, text="Добавить расход", padx=10, pady=10)
+        input_frame.pack(fill="x", padx=10, pady=5)
+
+        tk.Label(input_frame, text="Сумма:").grid(row=0, column=0)
+        self.amount_entry = tk.Entry(input_frame)
         self.amount_entry.grid(row=0, column=1)
 
-        tk.Label(root, text="Категория:").grid(row=1, column=0)
-        self.category_cb = ttk.Combobox(root, values=["Еда", "Транспорт", "Развлечения", "Прочее"])
-        self.category_cb.grid(row=1, column=1)
+        tk.Label(input_frame, text="Категория:").grid(row=0, column=2)
+        self.category_cb = ttk.Combobox(input_frame, values=["Еда", "Транспорт", "Развлечения", "Связь"])
+        self.category_cb.grid(row=0, column=3)
 
-        tk.Label(root, text="Дата (ГГГГ-ММ-ДД):").grid(row=2, column=0)
-        self.date_entry = tk.Entry(root)
+        tk.Label(input_frame, text="Дата (ГГГГ-ММ-ДД):").grid(row=0, column=4)
+        self.date_entry = tk.Entry(input_frame)
         self.date_entry.insert(0, datetime.now().strftime("%Y-%m-%d"))
-        self.date_entry.grid(row=2, column=1)
+        self.date_entry.grid(row=0, column=5)
 
-        # Кнопки
-        tk.Button(root, text="Добавить расход", command=self.add_expense).grid(row=3, column=0, columnspan=2)
-        tk.Button(root, text="Показать общую сумму", command=self.show_total).grid(row=4, column=0, columnspan=2)
+        tk.Button(input_frame, text="Добавить", command=self.add_expense, bg="#aaffaa").grid(row=0, column=6, padx=5)
 
-        # Таблица
+        # --- СЕКЦИЯ ФИЛЬТРАЦИИ ---
+        filter_frame = tk.LabelFrame(root, text="Фильтры и статистика", padx=10, pady=10)
+        filter_frame.pack(fill="x", padx=10, pady=5)
+
+        tk.Label(filter_frame, text="Категория:").grid(row=0, column=0)
+        self.f_category_cb = ttk.Combobox(filter_frame, values=["Все"] + ["Еда", "Транспорт", "Развлечения", "Связь"])
+        self.f_category_cb.current(0)
+        self.f_category_cb.grid(row=0, column=1)
+
+        tk.Label(filter_frame, text="С:").grid(row=0, column=2)
+        self.f_date_start = tk.Entry(filter_frame, width=12)
+        self.f_date_start.insert(0, "2024-01-01")
+        self.f_date_start.grid(row=0, column=3)
+
+        tk.Label(filter_frame, text="По:").grid(row=0, column=4)
+        self.f_date_end = tk.Entry(filter_frame, width=12)
+        self.f_date_end.insert(0, "2025-12-31")
+        self.f_date_end.grid(row=0, column=5)
+
+        tk.Button(filter_frame, text="Применить фильтр", command=self.update_table).grid(row=0, column=6, padx=5)
+        
+        self.total_label = tk.Label(filter_frame, text="Итого: 0", font=("Arial", 10, "bold"))
+        self.total_label.grid(row=0, column=7, padx=20)
+
+        # --- ТАБЛИЦА ---
         self.tree = ttk.Treeview(root, columns=("Сумма", "Категория", "Дата"), show='headings')
         for col in ("Сумма", "Категория", "Дата"):
             self.tree.heading(col, text=col)
-        self.tree.grid(row=5, column=0, columnspan=2)
+        self.tree.pack(fill="both", expand=True, padx=10, pady=5)
         
         self.update_table()
 
@@ -41,35 +66,50 @@ class ExpenseTracker:
             if amount <= 0: raise ValueError
             category = self.category_cb.get()
             date_str = self.date_entry.get()
-            datetime.strptime(date_str, "%Y-%m-%d") # Проверка формата даты
+            datetime.strptime(date_str, "%Y-%m-%d")
 
-            new_item = {"amount": amount, "category": category, "date": date_str}
-            self.expenses.append(new_item)
+            if not category: 
+                messagebox.showwarning("Внимание", "Выберите категорию")
+                return
+
+            self.expenses.append({"amount": amount, "category": category, "date": date_str})
             self.save_data()
             self.update_table()
+            self.amount_entry.delete(0, tk.END)
         except ValueError:
-            messagebox.showerror("Ошибка", "Введите корректную сумму и дату (ГГГГ-ММ-ДД)")
+            messagebox.showerror("Ошибка", "Некорректная сумма или формат даты (ГГГГ-ММ-ДД)")
+
+    def update_table(self):
+        # Очистка
+        for i in self.tree.get_children():
+            self.tree.delete(i)
+        
+        f_cat = self.f_category_cb.get()
+        f_start = self.f_date_start.get()
+        f_end = self.f_date_end.get()
+
+        filtered_sum = 0
+        for ex in self.expenses:
+            # Логика фильтрации
+            match_cat = (f_cat == "Все" or ex['category'] == f_cat)
+            match_date = (f_start <= ex['date'] <= f_end)
+
+            if match_cat and match_date:
+                self.tree.insert("", "end", values=(ex['amount'], ex['category'], ex['date']))
+                filtered_sum += ex['amount']
+        
+        self.total_label.config(text=f"Итого: {filtered_sum:.2f}")
 
     def save_data(self):
         with open("expenses.json", "w", encoding="utf-8") as f:
-            json.dump(self.expenses, f, ensure_ascii=False)
+            json.dump(self.expenses, f, ensure_ascii=False, indent=4)
 
     def load_data(self):
         try:
             with open("expenses.json", "r", encoding="utf-8") as f:
                 return json.load(f)
-        except FileNotFoundError:
+        except (FileNotFoundError, json.JSONDecodeError):
             return []
-
-    def update_table(self):
-        for i in self.tree.get_children():
-            self.tree.delete(i)
-        for ex in self.expenses:
-            self.tree.insert("", "end", values=(ex['amount'], ex['category'], ex['date']))
-
-    def show_total(self):
-        total = sum(ex['amount'] for ex in self.expenses)
-        messagebox.showinfo("Итого", f"Общая сумма расходов: {total}")
 
 if __name__ == "__main__":
     root = tk.Tk()
